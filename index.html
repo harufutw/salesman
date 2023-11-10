@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+<meta charset="UTF-8">
+<title>Sample_GoogleMap</title>
+
+<script src="http://maps.google.com/maps/api/js?key=AIzaSyDI1T5h0hWQsO8or8UFkYwWSuJElsXfBlg&language=ja"></script>
+
+<style>
+html {
+    height: 100%;
+}
+body {
+    height: 100%;
+}
+#map {
+    height: 50%;
+    width: 50%;
+}
+
+.input {
+    display: block;
+}
+
+#result td {
+    border: 1px solid;
+    width: 80px;
+    height: 30px;
+}
+</style>
+</head>
+
+<body>
+<div id="map"></div>
+<div>
+    <label class="input">起点<input type="text" id="start_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input"><input type="text" class="edge_input"></label>
+    <label class="input">終点<input type="text" id="finish_input"></label>
+    <input type="button" id="serch_button" value="search">
+</div>
+<table id="result">
+    <tr>
+        <td class="weight_sum"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+    </tr>
+    <tr>
+        <td class="weight_sum"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+    </tr>
+    <tr>
+        <td class="weight_sum"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+    </tr>
+    <tr>
+        <td class="weight_sum"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+    </tr>
+    <tr>
+        <td class="weight_sum"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+        <td class="edges"></td>
+    </tr>
+</table>
+
+<script>
+// 検索ボタン
+const serch_button = document.getElementById("serch_button");
+serch_button.addEventListener("click", search_root);
+
+// 地図の表示
+const myLatLng = { lat: 35.6712, lng: 139.767 };
+const map = new google.maps.Map(document.getElementById("map"), {
+    zoom: 13,
+    center: myLatLng,
+});
+
+function search_root() {
+    // スタート地点
+    const start_input = document.getElementById("start_input");
+    // 経由地
+    const edges_input_list = document.getElementsByClassName("edge_input");
+    let edges = [start_input.value];
+    for (let i=0; i<edges_input_list.length; i++) {
+        if (edges_input_list[i].value == "") {
+            break
+        } else {
+            edges[i+1] = edges_input_list[i].value;
+        }
+    }
+    const finish_input = document.getElementById("finish_input");
+    edges[edges.length] = finish_input.value;
+
+    // サービス
+    const service = new google.maps.DistanceMatrixService();
+    // ジオコーディング
+    const geocoder = new google.maps.Geocoder();
+    // 探索時に重みとして設定する要素
+    const factor = "duration";
+    // 初期個体の数
+    const first_bionts_num = 15;
+    // 交叉を繰り返す最大値
+    const repeat_max = 5;
+    // 残す親の数
+    const parent_num = 6;
+    // 作る子の数
+    const child_num = 4;
+    // 世代数
+    const generation = 10;
+
+    // エッジのマッピング
+    for (let i=0; i<edges.length; i++) {
+        geocoder.geocode({'address': edges[i]}, function(results, status){
+            if (status == 'OK') {
+                new google.maps.Marker({
+                position: results[0].geometry.location,
+                map,
+                });
+            } else {
+                alert("該当する結果がありませんでした：" + status);
+            }
+        });
+    }
+
+    // ルート探索時のオプション
+    const matrixOptions = {
+            origins: edges,
+            destinations: edges,
+            travelMode: "WALKING",
+            unitSystem: google.maps.UnitSystem.IMPERIAL
+        };
+
+    // 地名から重みを検索する関数
+    function weight_search(list, place) {
+        for (let i=0; i<list.length; i++) {
+            if (place == list[i][0]) {
+                return list[i][1];
+            }
+        }
+    }
+
+    // 地名が個体の何番目かを調べる関数
+    function index_search(list, place) {
+        for (let i=0; i<list.length; i++) {
+            if (list[i] == place) {
+                return i;
+            }
+        }
+    }
+
+    // 配列をシャッフルする関数
+    function shuffle(list) {
+        let newlist = list.slice();
+        let a = newlist.length;
+        while (a) {
+            let j = Math.floor(Math.random()*a);
+            let t = newlist[--a];
+            newlist[a] = newlist[j];
+            newlist[j] = t;
+        }
+        return newlist;
+    }
+
+    // ランダムな整数値(0<=x<a)を返す関数
+    function randint(a) {
+        return Math.floor(Math.random()*a);
+    }
+
+    // 交叉を行う関数
+    function partical_crossover(par1, par2, repeat_max, edges, nodes) {
+        let repeat = 1 + randint(repeat_max);
+        for (let j=0; j<repeat; j++) {
+            let p = 1 + randint(par1.length-2);
+            let par1_p = par1[p];
+            let par2_p = par2[p];
+            let q_par1 = index_search(par1,par2_p);
+            let q_par2 = index_search(par2,par1_p);
+            par1[p] = par2_p
+            par1[q_par1] = par1_p
+            par2[p] = par1_p
+            par2[q_par2] = par2_p
+        }
+        let new_par1 = par1.slice(1);
+        let new_par2 = par2.slice(1);
+        let weight = 0;
+        for (let k=0; k<new_par1.length-1; k++) {
+            weight = weight + weight_search(nodes[index_search(edges,new_par1[k])],new_par1[k+1]);
+        }
+        new_par1.unshift(weight);
+        let weight_2 = 0;
+        for (let k=0; k<new_par2.length-1; k++) {
+            weight_2 = weight_2 + weight_search(nodes[index_search(edges,new_par2[k])],new_par2[k+1]);
+        }
+        new_par2.unshift(weight_2);
+        return [new_par1,new_par2];
+    }
+
+    // 距離行列要求後に実行される関数
+    function callback(response, status) {
+        if (status !== "OK") {
+            alert("Error with distance matrix");
+            return;
+        }
+        const rows = response["rows"];
+        // 配列の整形
+        let nodes = [];
+        for (let i=0; i<rows.length; i++) {
+            let nodes_row = [];
+            let row = rows[i]["elements"];
+            for (let j=0; j<row.length; j++) {
+                nodes_row[nodes_row.length] = [edges[j],row[j][factor]["value"]];
+            }
+            nodes[nodes.length] = nodes_row;
+        }
+        console.log(nodes);
+        
+        //初期個体を生成
+        let bionts = [];
+        for (let m=0; m<first_bionts_num; m++) {
+            let biont = [];
+            biont = [edges[0]].concat(shuffle(edges.slice(1,-1)),[edges[edges.length-1]]);
+            let weight = 0;
+            for (let k=0; k<biont.length-1; k++) {
+                new_weight = weight_search(nodes[index_search(edges,biont[k])],biont[k+1]);
+                console.log(new_weight);
+                weight = weight + new_weight;
+            }
+            biont.unshift(weight);
+            bionts[m] = biont;
+        }
+        bionts.sort(function(a,b){return(a[0]-b[0]);});
+        console.log(bionts);
+
+        // 子作り開始
+        for (let p=0; p<generation; p++) {
+            bionts.splice(parent_num);
+            for (let n=0; n<child_num; n++) {
+                let newbiont = partical_crossover(bionts[0], bionts[1], 5 ,edges, nodes);
+                bionts = bionts.concat(newbiont);
+            }
+            bionts.sort(function(a,b){return(a[0]-b[0]);});
+            console.log(bionts);
+        }
+
+        // 結果を表示
+        // 重みの合計を入れるtd要素のリスト
+        let td_weight_list = document.getElementsByClassName("weight_sum");
+        for (let r=0; r<5; r++) {
+            td_weight_list[r].textContent = bionts[r][0];
+            // 経由edgesを入れるtd要素のリスト
+            let td_edges_list = document.getElementsByClassName("edges");
+            for (let q=0; q<bionts[r].length-1; q++) {
+                td_edges_list[10 * r + q].textContent = bionts[r][q+1];
+            }
+        }
+    }
+
+    service.getDistanceMatrix(matrixOptions, callback);
+
+}
+
+
+</script>
+
+</body>
+</html>
